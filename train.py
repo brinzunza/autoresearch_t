@@ -178,6 +178,7 @@ SYMBOL = 'EUR/USD'
 
 def train_model(model, optimizer, scheduler, X_train, y_train, time_budget=TIME_BUDGET):
     """Train model for fixed time budget."""
+    device = next(model.parameters()).device
     model.train()
     criterion = nn.MSELoss()
 
@@ -187,7 +188,7 @@ def train_model(model, optimizer, scheduler, X_train, y_train, time_budget=TIME_
 
     n_samples = X_train.shape[0]
 
-    print("Training model...")
+    print(f"Training model on {device}...")
     while True:
         t0 = time.time()
 
@@ -197,8 +198,8 @@ def train_model(model, optimizer, scheduler, X_train, y_train, time_budget=TIME_
 
         for i in range(0, n_samples, BATCH_SIZE):
             batch_indices = indices[i:i + BATCH_SIZE]
-            X_batch = X_train[batch_indices]
-            y_batch = y_train[batch_indices]
+            X_batch = X_train[batch_indices].to(device)
+            y_batch = y_train[batch_indices].to(device)
 
             predictions = model(X_batch).squeeze()
             loss = criterion(predictions, y_batch)
@@ -395,7 +396,7 @@ if __name__ == "__main__":
 
     t_start = time.time()
 
-    run_walk_forward_analysis()
+    run_training()
 
     t_end = time.time()
     print(f"total_seconds:  {t_end - t_start:.1f}")

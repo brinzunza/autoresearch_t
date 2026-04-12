@@ -52,8 +52,10 @@ TEST_RATIO = 0.3   # 30% for testing
 # Data download
 # ---------------------------------------------------------------------------
 
+DATA_ACQUISITION_DIR = "data_acquisition/data_acquisition"
+
 def download_forex_data(symbols=None, days=LOOKBACK_DAYS):
-    """Download forex OHLCV data using ccxt (1-minute candles)."""
+    """Download forex OHLCV data using ccxt (1-minute candles) or use existing local CSVs."""
     if symbols is None:
         symbols = DEFAULT_SYMBOLS
 
@@ -74,6 +76,31 @@ def download_forex_data(symbols=None, days=LOOKBACK_DAYS):
 
     for symbol in symbols:
         try:
+            filepath = os.path.join(DATA_DIR, f"{symbol.replace('/', '_')}_1m.parquet")
+
+            # Check if we have a local CSV file in data_acquisition first
+            clean_symbol = symbol.replace('/', '').replace('_', '').upper()
+            csv_pattern = f"{clean_symbol}_1min_*.csv"
+            
+            import glob
+            local_csvs = glob.glob(os.path.join(DATA_ACQUISITION_DIR, csv_pattern))
+            
+            if local_csvs:
+                latest_csv = max(local_csvs, key=os.path.getmtime)
+                print(f"Found local data for {symbol}: {latest_csv}")
+                df = pd.read_csv(latest_csv)
+                df['timestamp'] = pd.to_datetime(df['timestamp'])
+                # Ensure it has the columns we need
+                required_cols = ['timestamp', 'open', 'high', 'low', 'close', 'volume']
+                if all(col in df.columns for col in required_cols):
+                    df = df[required_cols]
+                    df = df.drop_duplicates(subset=['timestamp']).sort_values('timestamp').reset_index(drop=True)
+                    df.to_parquet(filepath, index=False)
+                    print(f"  Converted {latest_csv} to parquet: {len(df):,} candles")
+                    continue
+                else:
+                    print(f"  Local CSV {latest_csv} is missing required columns. Falling back to download.")
+
             trading_symbol = symbol_map.get(symbol, symbol)
             print(f"Downloading {symbol} (as {trading_symbol}) - 1min candles...")
 
@@ -249,34 +276,37 @@ def load_scaler():
 def create_sequences(df, feature_cols, lookback=60, horizon=15):
     """
     Create sequences for time series prediction.
-
-    Args:
-        df: DataFrame with features
-        feature_cols: List of feature column names
-        lookback: Number of timesteps to look back (in minutes)
-        horizon: Number of timesteps ahead to predict (in minutes)
-
-    Returns:
-        X: (n_samples, lookback, n_features) array
-        y: (n_samples,) array of returns
-        prices: (n_samples,) array of current prices (for backtesting)
+    Optimized version using numpy sliding windows.
     """
-    X, y, prices = [], [], []
+    print(f"  Processing {len(df):,} samples...")
+    
+    # Convert to numpy for speed
+    data = df[feature_cols].values
+    close_prices = df['close'].values
+    
+    # Create input sequences X: (n_samples, lookback, n_features)
+    # n_samples = len(df) - lookback - horizon
+    X = np.lib.stride_tricks.sliding_window_view(data[:-horizon], (lookback, data.shape[1]))
+    X = X.reshape(-1, lookback, data.shape[1])
+    
+    # Create targets y: future returns
+    # future_price is horizon minutes ahead of the END of the lookback window
+    # current_price is at the END of the lookback window
+    current_prices = close_prices[lookback:-horizon]
+    future_prices = close_prices[lookback + horizon:]
+    
+    y = (future_prices - current_prices) / current_prices
+    
+    # prices for backtesting (at the end of lookback window)
+    prices = current_prices
+    
+    # Ensure all have the same length (they should)
+    n_samples = min(len(X), len(y), len(prices))
+    X = X[:n_samples]
+    y = y[:n_samples]
+    prices = prices[:n_samples]
 
-    for i in range(lookback, len(df) - horizon):
-        # Features: lookback window of indicators
-        X.append(df[feature_cols].iloc[i - lookback:i].values)
-
-        # Target: future return
-        future_price = df['close'].iloc[i + horizon]
-        current_price = df['close'].iloc[i]
-        future_return = (future_price - current_price) / current_price
-        y.append(future_return)
-
-        # Store current price for backtesting
-        prices.append(current_price)
-
-    return np.array(X), np.array(y), np.array(prices)
+    return X.astype(np.float32), y.astype(np.float32), prices.astype(np.float32)
 
 
 # ---------------------------------------------------------------------------
