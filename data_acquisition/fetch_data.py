@@ -15,7 +15,57 @@ API_KEY = "abEgGQWtzBpMvz1H4o00DHvEMoG1G_Md"
 BASE_URL = "https://api.polygon.io/v2/aggs/ticker"
 
 # Default ticker - can be changed
-DEFAULT_TICKER = "AAPL"
+DEFAULT_TICKER = "C:EURUSD"  # Forex pair format for Polygon.io
+
+
+def format_ticker(ticker):
+    """
+    Convert user-friendly ticker to Polygon.io format.
+
+    Examples:
+        'EURUSD' -> 'C:EURUSD'
+        'EUR/USD' -> 'C:EURUSD'
+        'C:EURUSD' -> 'C:EURUSD' (already formatted)
+        'AAPL' -> 'AAPL' (stocks stay as-is)
+
+    Args:
+        ticker: User input ticker
+
+    Returns:
+        str: Polygon.io formatted ticker
+    """
+    ticker = ticker.upper().strip()
+
+    # Already in Polygon format
+    if ticker.startswith('C:'):
+        return ticker
+
+    # Remove slash if present (EUR/USD -> EURUSD)
+    ticker_clean = ticker.replace('/', '')
+
+    # Check if it's a forex pair (6 characters, all letters)
+    if len(ticker_clean) == 6 and ticker_clean.isalpha():
+        return f"C:{ticker_clean}"
+
+    # Otherwise assume it's a stock ticker
+    return ticker
+
+
+def get_display_name(ticker):
+    """
+    Get user-friendly display name for ticker.
+
+    Args:
+        ticker: Polygon.io formatted ticker
+
+    Returns:
+        str: Display name
+    """
+    if ticker.startswith('C:'):
+        # Forex pair - format as EUR/USD
+        pair = ticker[2:]  # Remove 'C:' prefix
+        return f"{pair[:3]}/{pair[3:]}"
+    return ticker
 
 
 def fetch_minute_bars(ticker, from_date, to_date, max_retries=3):
@@ -160,7 +210,14 @@ def fetch_all_data(ticker, start_date, end_date, chunk_days=7):
 
 def find_earliest_accessible_date(ticker, years_back=3):
     """
-    Quick search to find earliest accessible date.
+    Find earliest accessible date by testing progressively older dates.
+
+    The logic is:
+    - Test from recent to old (1 month, 3 months, 6 months, 1 year, 2 years)
+    - STOP when we hit first FAILURE (403 or no data)
+    - Return the MOST RECENT successful date BEFORE the failure
+
+    This finds the boundary between accessible and inaccessible data.
 
     Args:
         ticker: Stock ticker symbol
@@ -170,12 +227,9 @@ def find_earliest_accessible_date(ticker, years_back=3):
         datetime: Earliest accessible date
     """
     print("Finding earliest accessible date...")
+    print("(Testing from recent to old, stopping at first failure)")
 
     today = datetime.now()
-    # Start from most recent weekday
-    test_date = today - timedelta(days=1)
-    while test_date.weekday() >= 5:
-        test_date -= timedelta(days=1)
 
     # Test increasingly older dates
     test_dates = [
@@ -187,35 +241,38 @@ def find_earliest_accessible_date(ticker, years_back=3):
         today - timedelta(days=1095),  # 3 years
     ]
 
-    earliest = None
+    last_successful = None
 
     for test_date in test_dates:
-        # Skip to weekday
+        # Skip to weekday (for both forex and stocks)
         while test_date.weekday() >= 5:
             test_date -= timedelta(days=1)
 
         date_str = test_date.strftime("%Y-%m-%d")
-        print(f"  Testing {date_str}...", end=" ")
+        print(f"  Testing {date_str}...", end=" ", flush=True)
 
         bars = fetch_minute_bars(ticker, test_date, test_date)
 
         if bars and len(bars) > 0:
             print(f"✓ ({len(bars)} bars)")
-            earliest = test_date
+            last_successful = test_date  # Update the last date that worked
         else:
-            print("✗")
+            print("✗ No access")
+            # We hit the boundary - stop here
             break
 
         time.sleep(13)  # Rate limiting
 
-    if earliest:
-        print(f"✓ Earliest accessible: {earliest.date()}")
-        return earliest
+    if last_successful:
+        print(f"✓ Earliest accessible: {last_successful.date()}")
+        return last_successful
     else:
-        # Default to 2 years (common for free tier)
-        default = today - timedelta(days=730)
-        print(f"Using default: {default.date()}")
-        return default
+        # If even 1 month ago fails, try just yesterday
+        yesterday = today - timedelta(days=1)
+        while yesterday.weekday() >= 5:
+            yesterday -= timedelta(days=1)
+        print(f"⚠ Using fallback: {yesterday.date()} (1 day ago)")
+        return yesterday
 
 
 def save_data(df, ticker, output_dir="data_acquisition"):
@@ -224,7 +281,7 @@ def save_data(df, ticker, output_dir="data_acquisition"):
 
     Args:
         df: DataFrame with market data
-        ticker: Stock ticker symbol
+        ticker: Ticker symbol (Polygon.io format)
         output_dir: Directory to save file
 
     Returns:
@@ -232,10 +289,13 @@ def save_data(df, ticker, output_dir="data_acquisition"):
     """
     Path(output_dir).mkdir(parents=True, exist_ok=True)
 
+    # Clean ticker for filename (remove 'C:' prefix and special chars)
+    clean_ticker = ticker.replace('C:', '').replace('/', '_').replace(':', '_')
+
     # Create filename with date range
     start_date = df['timestamp'].min().strftime("%Y%m%d")
     end_date = df['timestamp'].max().strftime("%Y%m%d")
-    filename = f"{ticker}_1min_{start_date}_{end_date}.csv"
+    filename = f"{clean_ticker}_1min_{start_date}_{end_date}.csv"
     filepath = os.path.join(output_dir, filename)
 
     # Save to CSV
@@ -247,7 +307,7 @@ def save_data(df, ticker, output_dir="data_acquisition"):
     print(f"  File size: {os.path.getsize(filepath) / (1024*1024):.2f} MB")
 
     # Also create a symlink to latest data
-    latest_link = os.path.join(output_dir, f"{ticker}_1min_latest.csv")
+    latest_link = os.path.join(output_dir, f"{clean_ticker}_1min_latest.csv")
     if os.path.exists(latest_link) or os.path.islink(latest_link):
         os.remove(latest_link)
     os.symlink(os.path.basename(filepath), latest_link)
@@ -260,12 +320,21 @@ def main():
     print("=" * 70)
     print("POLYGON.IO DATA ACQUISITION")
     print("=" * 70)
+    print("Supported formats:")
+    print("  Forex: EURUSD, EUR/USD, GBPUSD, etc.")
+    print("  Stocks: AAPL, TSLA, SPY, etc.")
+    print()
 
-    ticker = input(f"Enter ticker symbol (default: {DEFAULT_TICKER}): ").strip().upper()
-    if not ticker:
-        ticker = DEFAULT_TICKER
+    user_input = input(f"Enter ticker symbol (default: EUR/USD): ").strip()
+    if not user_input:
+        user_input = "EUR/USD"
 
-    print(f"\nTicker: {ticker}")
+    # Format ticker for Polygon.io API
+    ticker = format_ticker(user_input)
+    display_name = get_display_name(ticker)
+
+    print(f"\nTicker: {display_name}")
+    print(f"API format: {ticker}")
     print(f"API Key: {API_KEY[:10]}...")
 
     # Find earliest accessible date
@@ -273,14 +342,31 @@ def main():
     earliest_date = find_earliest_accessible_date(ticker)
 
     # Get most recent date (yesterday or last trading day)
-    end_date = datetime.now() - timedelta(days=1)
-    while end_date.weekday() >= 5:
+    today = datetime.now()
+    end_date = today - timedelta(days=1)
+
+    # Skip weekends
+    while end_date.weekday() >= 5:  # 5=Saturday, 6=Sunday
         end_date -= timedelta(days=1)
+
+    # Sanity check: end_date should not be in the future
+    if end_date > today:
+        print(f"⚠ Warning: End date {end_date.date()} is in the future! Using today instead.")
+        end_date = today
+        while end_date.weekday() >= 5:
+            end_date -= timedelta(days=1)
+
+    # Sanity check: earliest_date should be before end_date
+    if earliest_date >= end_date:
+        print(f"⚠ Warning: Earliest date {earliest_date.date()} is not before end date {end_date.date()}!")
+        print(f"   This suggests the API access check failed. Using last 30 days instead.")
+        earliest_date = end_date - timedelta(days=30)
 
     # Confirm with user
     print("\n" + "=" * 70)
     print(f"Will fetch data from {earliest_date.date()} to {end_date.date()}")
-    print(f"Estimated days: {(end_date - earliest_date).days}")
+    print(f"Total days: {(end_date - earliest_date).days}")
+    print(f"Today's date: {today.date()}")
     print("This may take a while due to API rate limits (5 requests/minute)")
     print("=" * 70)
 

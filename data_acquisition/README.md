@@ -2,6 +2,8 @@
 
 This folder contains scripts to fetch 1-minute bar data from Polygon.io for use with autoresearch.
 
+**Primary use case:** Fetching EUR/USD forex data to match the autoresearch training pipeline.
+
 ## Scripts
 
 ### 1. `test_access_limits.py`
@@ -9,7 +11,7 @@ Tests how far back you can access historical data with your API key (free tier t
 
 **Usage:**
 ```bash
-python data_acquisition/test_access_limits.py
+python3 data_acquisition/test_access_limits.py
 ```
 
 **Output:**
@@ -21,17 +23,19 @@ Fetches all available 1-minute bar data for a given ticker symbol and saves it t
 
 **Usage:**
 ```bash
-python data_acquisition/fetch_data.py
+python3 data_acquisition/fetch_data.py
 ```
 
 **Interactive prompts:**
-- Enter ticker symbol (default: AAPL)
+- Enter ticker symbol (default: EUR/USD)
+  - Forex: `EUR/USD`, `EURUSD`, `GBP/USD`, etc.
+  - Stocks: `AAPL`, `TSLA`, `SPY`, etc.
 - Confirms date range before fetching
 - Shows progress during download
 
 **Output:**
-- CSV file: `{TICKER}_1min_{START_DATE}_{END_DATE}.csv`
-- Symlink: `{TICKER}_1min_latest.csv` (always points to most recent data)
+- CSV file: `EURUSD_1min_{START_DATE}_{END_DATE}.csv`
+- Symlink: `EURUSD_1min_latest.csv` (always points to most recent data)
 
 ## Data Format
 
@@ -54,21 +58,44 @@ Polygon.io free tier limits:
 
 ## Example Workflow
 
-1. **Test access limits (optional):**
+### For EUR/USD (recommended for autoresearch):
+
+1. **Automated setup (easiest):**
    ```bash
-   python data_acquisition/test_access_limits.py
+   ./data_acquisition/setup_data.sh
+   ```
+   - Just press Enter to use EUR/USD default
+   - Follow prompts
+
+2. **Manual setup:**
+
+   a. **Test access limits (optional):**
+   ```bash
+   python3 data_acquisition/test_access_limits.py
    ```
 
-2. **Fetch data:**
+   b. **Fetch data:**
    ```bash
-   python data_acquisition/fetch_data.py
+   python3 data_acquisition/fetch_data.py
    ```
-   - Enter ticker when prompted (e.g., AAPL, TSLA, SPY)
-   - Confirm to start download
-   - Wait for completion
+   - Press Enter to use EUR/USD default
+   - Confirm to start download (~30-60 minutes)
 
-3. **Use with autoresearch:**
-   The data will be saved in CSV format ready for use with your training pipeline.
+   c. **Prepare for training:**
+   ```bash
+   python3 data_acquisition/prepare_polygon.py --ticker EUR/USD
+   ```
+
+   d. **Train:**
+   ```bash
+   python3 train.py
+   ```
+
+### For other pairs/stocks:
+
+Follow the same steps but enter your desired ticker when prompted:
+- Forex examples: `GBP/USD`, `USD/JPY`, `GBPUSD`
+- Stock examples: `AAPL`, `TSLA`, `SPY`
 
 ## Notes
 

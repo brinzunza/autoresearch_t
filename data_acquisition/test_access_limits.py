@@ -10,8 +10,8 @@ import time
 API_KEY = "abEgGQWtzBpMvz1H4o00DHvEMoG1G_Md"
 BASE_URL = "https://api.polygon.io/v2/aggs/ticker"
 
-# Common stock ticker to test with
-TICKER = "AAPL"
+# Default ticker to test with (forex for autoresearch)
+TICKER = "C:EURUSD"  # EUR/USD forex pair
 
 def test_date_access(ticker, date_str):
     """
@@ -108,7 +108,14 @@ def main():
     print("=" * 70)
     print("POLYGON.IO FREE TIER DATA ACCESS LIMIT TEST")
     print("=" * 70)
-    print(f"Testing with ticker: {TICKER}")
+
+    # Display ticker in user-friendly format
+    display_ticker = TICKER
+    if TICKER.startswith('C:'):
+        pair = TICKER[2:]
+        display_ticker = f"{pair[:3]}/{pair[3:]}"
+
+    print(f"Testing with ticker: {display_ticker} ({TICKER})")
     print(f"API Key: {API_KEY[:10]}...")
     print()
 
@@ -116,8 +123,10 @@ def main():
     today = datetime.now()
     # Go back to most recent trading day
     test_date = today - timedelta(days=1)
-    while test_date.weekday() >= 5:
-        test_date -= timedelta(days=1)
+    # Only skip weekends for stocks, not forex
+    if not TICKER.startswith('C:'):
+        while test_date.weekday() >= 5:
+            test_date -= timedelta(days=1)
 
     print("Step 1: Testing recent data access...")
     print("-" * 70)

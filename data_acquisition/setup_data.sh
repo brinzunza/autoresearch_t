@@ -3,14 +3,22 @@
 
 set -e  # Exit on error
 
+# Get the script directory and parent directory
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+PARENT_DIR="$( cd "$SCRIPT_DIR/.." && pwd )"
+
 echo "=============================================================================="
 echo "AUTORESEARCH POLYGON.IO DATA SETUP"
 echo "=============================================================================="
 echo ""
+echo "Supported formats:"
+echo "  Forex: EURUSD, EUR/USD, GBPUSD, etc."
+echo "  Stocks: AAPL, TSLA, SPY, etc."
+echo ""
 
 # Get ticker from user
-read -p "Enter ticker symbol (default: AAPL): " TICKER
-TICKER=${TICKER:-AAPL}
+read -p "Enter ticker symbol (default: EUR/USD): " TICKER
+TICKER=${TICKER:-EUR/USD}
 
 echo ""
 echo "Using ticker: $TICKER"
@@ -25,7 +33,7 @@ if [[ "$TEST_LIMITS" == "y" ]]; then
     echo "=============================================================================="
     echo "Step 1: Testing data access limits..."
     echo "=============================================================================="
-    python data_acquisition/test_access_limits.py
+    python3 "$SCRIPT_DIR/test_access_limits.py"
     echo ""
     read -p "Press Enter to continue with data fetch..."
 fi
@@ -38,8 +46,8 @@ echo "==========================================================================
 echo ""
 echo "This will:"
 echo "  - Find the earliest accessible date for your API tier"
-echo "  - Download all available 1-minute bars"
-echo "  - Save to data_acquisition/${TICKER}_1min_YYYYMMDD_YYYYMMDD.csv"
+echo "  - Download all available 1-minute bars for $TICKER"
+echo "  - Save to data_acquisition/ folder"
 echo ""
 echo "NOTE: This may take 30-60 minutes due to API rate limits (5 requests/min)"
 echo ""
@@ -50,15 +58,16 @@ if [[ "$PROCEED" != "yes" ]]; then
     exit 0
 fi
 
-# Run fetch script with ticker pre-filled
-echo "$TICKER" | python data_acquisition/fetch_data.py
+# Run fetch script with ticker and confirmation pre-filled
+# Need to provide two inputs: ticker and "yes" for confirmation
+printf "%s\nyes\n" "$TICKER" | python3 "$SCRIPT_DIR/fetch_data.py"
 
 # Step 3: Prepare data for autoresearch
 echo ""
 echo "=============================================================================="
 echo "Step 3: Preparing data for autoresearch training..."
 echo "=============================================================================="
-python data_acquisition/prepare_polygon.py --ticker "$TICKER"
+python3 "$SCRIPT_DIR/prepare_polygon.py" --ticker "$TICKER"
 
 # Step 4: Done
 echo ""
@@ -68,9 +77,9 @@ echo "==========================================================================
 echo ""
 echo "Your data is ready for training. You can now run:"
 echo ""
-echo "  python train.py"
+echo "  python3 train.py"
 echo ""
 echo "Or specify this symbol explicitly:"
 echo ""
-echo "  python train.py --symbols ${TICKER}"
+echo "  python3 train.py --symbols ${TICKER}"
 echo ""
