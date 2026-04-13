@@ -321,13 +321,13 @@ def create_sequences(df, feature_cols, lookback=60, horizon=15):
     X = np.lib.stride_tricks.sliding_window_view(data[:-horizon], (lookback, data.shape[1]))
     X = X.reshape(-1, lookback, data.shape[1])
     
-    # Create targets y: future returns
+    # Create targets y: future returns (scaled by 100 for better loss range)
     # future_price is horizon minutes ahead of the END of the lookback window
     # current_price is at the END of the lookback window
     current_prices = close_prices[lookback:-horizon]
     future_prices = close_prices[lookback + horizon:]
     
-    y = (future_prices - current_prices) / current_prices
+    y = 100.0 * (future_prices - current_prices) / current_prices
     
     # prices for backtesting (at the end of lookback window)
     prices = current_prices
@@ -554,10 +554,11 @@ def evaluate_strategy(model, X_val, y_val, prices_val, **backtest_params):
         preds = model(batch).cpu().numpy().flatten()
         predictions.extend(preds)
 
-    predictions = np.array(predictions)
+    predictions = np.array(predictions) / 100.0
+    y_val_decimal = np.array(y_val) / 100.0
 
     # Backtest
-    results = backtest_strategy(predictions, y_val, prices_val, **backtest_params)
+    results = backtest_strategy(predictions, y_val_decimal, prices_val, **backtest_params)
 
     return results['calmar_ratio'], results
 

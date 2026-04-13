@@ -151,7 +151,7 @@ POSITION_SIZING = 'proportional'  # 'fixed', 'proportional', 'kelly'
 MAX_POSITION = 1.0  # Max 100% of capital in any position
 
 # Entry rules
-ENTRY_THRESHOLD = 0.001  # Min abs(predicted_return) to enter (0.1%)
+ENTRY_THRESHOLD = 0.0002  # Min abs(predicted_return) to enter (0.02%)
 
 # Exit rules
 TAKE_PROFIT_PCT = 0.02  # 2% take profit
