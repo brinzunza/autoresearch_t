@@ -164,8 +164,8 @@ MAX_DRAWDOWN_EXIT = None  # Exit all if drawdown exceeds this (e.g., 0.20 = 20%)
 TRANSACTION_COST = 0.0  # Transaction cost per trade (e.g., 0.001 = 0.1%)
 
 # ===== TRAINING PARAMETERS (minimal changes) =====
-BATCH_SIZE = 32
-LEARNING_RATE = 0.001
+BATCH_SIZE = 128
+LEARNING_RATE = 0.005
 WEIGHT_DECAY = 0.0001
 
 # Data

@@ -327,7 +327,7 @@ def create_sequences(df, feature_cols, lookback=60, horizon=15):
     current_prices = close_prices[lookback:-horizon]
     future_prices = close_prices[lookback + horizon:]
     
-    y = 100.0 * (future_prices - current_prices) / current_prices
+    y = 1000.0 * (future_prices - current_prices) / current_prices
     
     # prices for backtesting (at the end of lookback window)
     prices = current_prices
@@ -554,8 +554,8 @@ def evaluate_strategy(model, X_val, y_val, prices_val, **backtest_params):
         preds = model(batch).cpu().numpy().flatten()
         predictions.extend(preds)
 
-    predictions = np.array(predictions) / 100.0
-    y_val_decimal = np.array(y_val) / 100.0
+    predictions = np.array(predictions) / 1000.0
+    y_val_decimal = np.array(y_val) / 1000.0
 
     # Debug info
     print(f"  Prediction range: [{predictions.min():.8f}, {predictions.max():.8f}], mean: {predictions.mean():.8f}")
