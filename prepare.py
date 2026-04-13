@@ -557,6 +557,14 @@ def evaluate_strategy(model, X_val, y_val, prices_val, **backtest_params):
     predictions = np.array(predictions) / 100.0
     y_val_decimal = np.array(y_val) / 100.0
 
+    # Debug info
+    print(f"  Prediction range: [{predictions.min():.8f}, {predictions.max():.8f}], mean: {predictions.mean():.8f}")
+    print(f"  Target range:     [{y_val_decimal.min():.8f}, {y_val_decimal.max():.8f}], mean: {y_val_decimal.mean():.8f}")
+    
+    threshold = backtest_params.get('entry_threshold', 0)
+    potential_trades = np.sum(np.abs(predictions) >= threshold)
+    print(f"  Potential trades (above {threshold} threshold): {potential_trades}")
+
     # Backtest
     results = backtest_strategy(predictions, y_val_decimal, prices_val, **backtest_params)
 
