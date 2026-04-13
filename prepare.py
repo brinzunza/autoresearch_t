@@ -212,12 +212,44 @@ def add_technical_indicators(df, rsi_period=14, macd_fast=12, macd_slow=26,
 
 
 def prepare_features(symbol='EUR/USD', **indicator_params):
-    """Load data and prepare features for a symbol."""
+    """Load data and prepare features for a symbol, ensuring local CSVs are used."""
     filepath = os.path.join(DATA_DIR, f"{symbol.replace('/', '_')}_1m.parquet")
+
+    # Sync with local CSV if it exists and is newer or parquet is missing
+    clean_symbol = symbol.replace('/', '').replace('_', '').upper()
+    csv_pattern = f"{clean_symbol}_1min_*.csv"
+    import glob
+    local_csvs = glob.glob(os.path.join(DATA_ACQUISITION_DIR, csv_pattern))
+    
+    if local_csvs:
+        latest_csv = max(local_csvs, key=os.path.getmtime)
+        should_convert = False
+        
+        if not os.path.exists(filepath):
+            should_convert = True
+        else:
+            csv_mtime = os.path.getmtime(latest_csv)
+            parquet_mtime = os.path.getmtime(filepath)
+            if csv_mtime > parquet_mtime:
+                should_convert = True
+        
+        if should_convert:
+            print(f"Syncing {symbol} from local CSV: {latest_csv}")
+            df_csv = pd.read_csv(latest_csv)
+            df_csv['timestamp'] = pd.to_datetime(df_csv['timestamp'])
+            required_cols = ['timestamp', 'open', 'high', 'low', 'close', 'volume']
+            if all(col in df_csv.columns for col in required_cols):
+                df_csv = df_csv[required_cols]
+                df_csv = df_csv.drop_duplicates(subset=['timestamp']).sort_values('timestamp').reset_index(drop=True)
+                os.makedirs(DATA_DIR, exist_ok=True)
+                df_csv.to_parquet(filepath, index=False)
+                print(f"  Updated cache: {len(df_csv):,} candles")
+            else:
+                print(f"  Warning: Local CSV {latest_csv} is missing columns. Using existing cache if possible.")
 
     if not os.path.exists(filepath):
         print(f"Data file not found: {filepath}")
-        print("Run download_forex_data() first")
+        print(f"Please ensure a CSV exists in {DATA_ACQUISITION_DIR} or run download_forex_data()")
         return None
 
     df = pd.read_parquet(filepath)
