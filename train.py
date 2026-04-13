@@ -35,6 +35,9 @@ class LSTMStrategy(nn.Module):
         self.hidden_dim = hidden_dim
         self.num_layers = num_layers
 
+        # Batch norm for inputs
+        self.bn_input = nn.BatchNorm1d(input_dim)
+
         self.lstm = nn.LSTM(
             input_dim, hidden_dim,
             num_layers=num_layers,
@@ -44,12 +47,31 @@ class LSTMStrategy(nn.Module):
 
         self.fc = nn.Sequential(
             nn.Linear(hidden_dim, hidden_dim // 2),
-            nn.ReLU(),
+            nn.LeakyReLU(0.1),
             nn.Dropout(dropout),
             nn.Linear(hidden_dim // 2, 1)
         )
+        
+        # Initialize weights
+        self._init_weights()
+
+    def _init_weights(self):
+        for name, param in self.named_parameters():
+            if 'weight' in name:
+                if 'lstm' in name:
+                    nn.init.orthogonal_(param)
+                else:
+                    nn.init.kaiming_normal_(param)
+            elif 'bias' in name:
+                nn.init.constant_(param, 0)
 
     def forward(self, x):
+        # x shape: (batch, seq_len, features)
+        # BatchNorm1d expects (batch, features, seq_len)
+        x = x.transpose(1, 2)
+        x = self.bn_input(x)
+        x = x.transpose(1, 2)
+        
         lstm_out, _ = self.lstm(x)
         last_out = lstm_out[:, -1, :]
         return self.fc(last_out)
