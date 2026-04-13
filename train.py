@@ -57,11 +57,19 @@ class LSTMStrategy(nn.Module):
 
     def _init_weights(self):
         for name, param in self.named_parameters():
-            if 'weight' in name:
-                if 'lstm' in name:
-                    nn.init.orthogonal_(param)
+            if 'bn' in name:
+                if 'weight' in name:
+                    nn.init.constant_(param, 1)
+                elif 'bias' in name:
+                    nn.init.constant_(param, 0)
+            elif 'weight' in name:
+                if param.dim() >= 2:
+                    if 'lstm' in name:
+                        nn.init.orthogonal_(param)
+                    else:
+                        nn.init.kaiming_normal_(param)
                 else:
-                    nn.init.kaiming_normal_(param)
+                    nn.init.normal_(param)
             elif 'bias' in name:
                 nn.init.constant_(param, 0)
 
