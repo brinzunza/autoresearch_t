@@ -132,15 +132,12 @@ SMA_LONG = 50
 BB_WINDOW = 20
 ATR_WINDOW = 14
 
-# Feature selection (which indicators to use)
+# Feature selection (stationary features only)
 USE_INDICATORS = [
     'returns', 'log_returns',
-    f'sma_{SMA_SHORT}', f'sma_{SMA_LONG}',
-    'ema_12', 'ema_26',
     'macd', 'macd_signal', 'macd_diff',
     'rsi', 'stoch_k', 'stoch_d',
-    'bb_high', 'bb_low', 'bb_mid', 'bb_width',
-    'atr',
+    'bb_width', 'atr',
     f'price_to_sma{SMA_SHORT}', f'price_to_sma{SMA_LONG}',
 ]
 
@@ -180,7 +177,7 @@ def train_model(model, optimizer, scheduler, X_train, y_train, time_budget=TIME_
     """Train model for fixed time budget."""
     device = next(model.parameters()).device
     model.train()
-    criterion = nn.MSELoss()
+    criterion = nn.SmoothL1Loss()  # More robust than MSE for financial data
 
     t_start = time.time()
     total_time = 0
